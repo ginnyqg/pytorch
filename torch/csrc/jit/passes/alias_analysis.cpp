@@ -428,6 +428,12 @@ void AliasDb::analyzeImpl(Node* node) {
     }
   }
 
+  if (!schema.has_alias_annotation()) {
+    // If the schema eixsts but explicitly lacks aliasing information, it
+    // should be analyzed as a custom op.
+    return analyzeCustomOp(node);
+  }
+
   // Bind formal alias annotation to actual alias sets
   std::unordered_map<Symbol, Value*> formalToActual;
   for (size_t i = 0; i < schema.arguments().size(); i++) {
@@ -680,6 +686,19 @@ void AliasDb::analyzeSetAttr(Node* node) {
   const auto self = node->inputs().at(0);
   AT_ASSERT(self->type()->kind() == TypeKind::ClassType);
   registerWrite(self, node);
+}
+
+// Custom ops may write to any input and produce wildcards
+void AliasDb::analyzeCustomOp(Node* node) {
+  for (const auto input : node->inputs()) {
+    registerWrite(input, node);
+  }
+
+  // TODO(suo): we can make the more refined assumption that outputs may only
+  // alias any input.
+  for (const auto output : node->outputs()) {
+    setWildcard(output);
+  }
 }
 
 // BroadcastingChunk: all inputs are broadcasted, and then individually chunked.
